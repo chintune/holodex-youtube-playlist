@@ -1,0 +1,31 @@
+name: Validate
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check sync.mjs
+          node --check scripts/youtube-auth.mjs
+
+      - name: Check for accidental zero-width characters
+        run: |
+          ! grep -RIl --exclude-dir=.git $'\\u200b' .
