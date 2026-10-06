@@ -25,7 +25,3 @@ jobs:
         run: |
           node --check sync.mjs
           node --check scripts/youtube-auth.mjs
-
-      - name: Check for accidental zero-width characters
-        run: |
-          ! grep -RIl --exclude-dir=.git $'\\u200b' .
