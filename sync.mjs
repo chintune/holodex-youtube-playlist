@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-const HOL​ODEX_API = "https://holodex.net/api/v2/search/videoSearch";
+import fs from "node:fs";
+const HOLODEX_API = "https://holodex.net/api/v2/search/videoSearch";
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
-const HOL​ODEX_TOPIC = "Original_Song";
-const HOL​ODEX_ORG = "Hololive";
+const HOLODEX_TOPIC = "Original_Song";
+const HOLODEX_ORG = "Hololive";
 const INITIAL_LIMIT = 50;
 const PLAYLIST_TITLE = process.env.YOUTUBE_PLAYLIST_TITLE || "Hololive Original Songs";
 const PLAYLIST_PRIVACY = process.env.YOUTUBE_PLAYLIST_PRIVACY || "unlisted";
@@ -102,15 +103,15 @@ async function holodexLatest50() {
     sort: "newest",
     target: ["stream"],
     conditions: [],
-    topic: [HOL​ODEX_TOPIC],
-    org: [HOL​ODEX_ORG],
+    topic: [HOLODEX_TOPIC],
+    org: [HOLODEX_ORG],
     paginated: true,
     offset: 0,
     limit: INITIAL_LIMIT,
   };
 
   const data = await fetchJson(
-    HOL​ODEX_API,
+    HOLODEX_API,
     {
       method: "POST",
       headers: {
@@ -331,13 +332,12 @@ function writeSummary(lines) {
   const file = process.env.GITHUB_STEP_SUMMARY;
   if (!file) return;
 
-  const fs = require("node:fs");
   fs.appendFileSync(file, lines.join("\n") + "\n", "utf8");
 }
 
 async function main() {
   console.log("=== Holodex → YouTube Playlist Sync ===");
-  console.log(`Source: ${HOL​ODEX_ORG} + ${HOL​ODEX_TOPIC}`);
+  console.log(`Source: ${HOLODEX_ORG} + ${HOLODEX_TOPIC}`);
   console.log(`Playlist: ${PLAYLIST_TITLE}`);
   console.log(`Initial/import window: latest ${INITIAL_LIMIT}`);
   console.log("Mode: append-only (existing playlist videos are never removed)\n");
