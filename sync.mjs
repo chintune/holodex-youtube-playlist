@@ -98,64 +98,81 @@ async function getYouTubeAccessToken() {
 
 async function holodexLatest50() {
   const apiKey = requiredEnv("HOLODEX_API_KEY");
-
-  const payload = {
-    sort: "newest",
-    target: ["stream"],
-    conditions: [],
-    topic: [HOLODEX_TOPIC],
-    org: [HOLODEX_ORG],
-    paginated: true,
-    offset: 0,
-    limit: INITIAL_LIMIT,
-  };
-
-  const data = await fetchJson(
-    HOLODEX_API,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-APIKEY": apiKey,
-      },
-      body: JSON.stringify(payload),
-    },
-    "Holodex videoSearch",
-  );
-
-  if (!Array.isArray(data?.items)) {
-    throw new Error("Holodex returned an unexpected response: missing items[]");
-  }
-
   const seen = new Set();
   const items = [];
+  const maxPages = 5;
 
-  for (const item of data.items) {
-    const id = typeof item?.id === "string" ? item.id.trim() : "";
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
+  for (let page = 0; page < maxPages && items.length < INITIAL_LIMIT; page += 1) {
+    const offset = page * INITIAL_LIMIT;
+    const payload = {
+      sort: "newest",
+      target: ["stream"],
+      conditions: [],
+      topic: [HOLODEX_TOPIC],
+      org: [HOLODEX_ORG],
+      paginated: true,
+      offset,
+      limit: INITIAL_LIMIT,
+    };
 
-    // The Holodex topic is attached to streams. Avoid future live/upcoming
-    // entries that cannot be added reliably to a YouTube playlist yet.
-    if (item.status === "live" || item.status === "upcoming" || item.status === "missing") {
-      continue;
+    const data = await fetchJson(
+      HOLODEX_API,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-APIKEY": apiKey,
+        },
+        body: JSON.stringify(payload),
+      },
+      `Holodex videoSearch page ${page + 1}`,
+    );
+
+    if (!Array.isArray(data?.items)) {
+      throw new Error(
+        `Holodex returned an unexpected response on page ${page + 1}: missing items[]`,
+      );
     }
 
-    items.push({
-      id,
-      title: typeof item.title === "string" ? item.title : id,
-      publishedAt: item.published_at || item.available_at || null,
-      channelName: item.channel?.english_name || item.channel?.name || "",
-      url: `https://www.youtube.com/watch?v=${id}`,
-    });
+    for (const item of data.items) {
+      const id = typeof item?.id === "string" ? item.id.trim() : "";
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+
+      // Don't add premieres/live/upcoming/missing videos until YouTube can
+      // expose them as normal playlist-able videos. Keep paging so the
+      // initial import can still collect a full 50 usable matches.
+      if (
+        item.status === "live" ||
+        item.status === "upcoming" ||
+        item.status === "missing"
+      ) {
+        continue;
+      }
+
+      items.push({
+        id,
+        title: typeof item.title === "string" ? item.title : id,
+        publishedAt: item.published_at || item.available_at || null,
+        channelName: item.channel?.english_name || item.channel?.name || "",
+        url: `https://www.youtube.com/watch?v=${id}`,
+      });
+
+      if (items.length >= INITIAL_LIMIT) break;
+    }
+
+    if (items.length >= INITIAL_LIMIT) break;
+
+    const total = Number(data.total);
+    if (Number.isFinite(total) && offset + data.items.length >= total) break;
+    if (data.items.length < INITIAL_LIMIT) break;
   }
 
   return {
-    total: Number.isFinite(Number(data.total)) ? Number(data.total) : data.items.length,
-    items: items.slice(0, INITIAL_LIMIT),
+    total: items.length,
+    items,
   };
 }
-
 async function youtubeRequest(accessToken, path, options = {}, label = "YouTube API request") {
   return fetchJson(
     `${YOUTUBE_API}${path}`,
