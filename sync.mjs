@@ -237,8 +237,8 @@ async function resolvePlaylistId(accessToken) {
   );
 
   if (matches.length > 0) {
-    // Prefer an exact title match; if more than one exists, use the oldest one
-    // by stable playlist ID order so repeated runs remain deterministic.
+    // Prefer an exact title match; if more than one exists, use a stable
+    // playlist-ID order so repeated runs remain deterministic.
     matches.sort((a, b) => String(a.id).localeCompare(String(b.id)));
     const playlist = matches[0];
     console.log(`Using existing playlist: ${PLAYLIST_TITLE} (${playlist.id})`);
