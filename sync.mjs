@@ -1,24 +1,33 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+
 const HOLODEX_API = "https://holodex.net/api/v2/search/videoSearch";
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
+
 const HOLODEX_TOPIC = "Original_Song";
 const HOLODEX_ORG = "Hololive";
+
 const INITIAL_LIMIT = 50;
-const PLAYLIST_TITLE = process.env.YOUTUBE_PLAYLIST_TITLE || "Hololive Original Songs";
-const PLAYLIST_PRIVACY = process.env.YOUTUBE_PLAYLIST_PRIVACY || "unlisted";
+const PLAYLIST_TITLE =
+  process.env.YOUTUBE_PLAYLIST_TITLE || "Hololive Original Songs";
+const PLAYLIST_PRIVACY =
+  process.env.YOUTUBE_PLAYLIST_PRIVACY || "unlisted";
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
   return value;
 }
 
 function jsonErrorMessage(data) {
   if (!data) return "Unknown API error";
   if (data.error?.message) return data.error.message;
-  if (data.error?.errors?.[0]?.message) return data.error.errors[0].message;
+  if (data.error?.errors?.[0]?.message) {
+    return data.error.errors[0].message;
+  }
   if (typeof data.error === "string") return data.error;
   return JSON.stringify(data);
 }
@@ -42,15 +51,21 @@ async function fetchJson(url, options = {}, label = "API request") {
     });
 
     const text = await response.text();
+
     let data = null;
     try {
       data = text ? JSON.parse(text) : null;
     } catch {
-      throw new Error(`${label} returned non-JSON HTTP ${response.status}: ${text.slice(0, 500)}`);
+      const bodyPreview = text.slice(0, 500);
+      throw new Error(
+        `${label} returned non-JSON HTTP ${response.status}: ${bodyPreview}`,
+      );
     }
 
     if (!response.ok) {
-      const error = new Error(`${label} failed (HTTP ${response.status}): ${jsonErrorMessage(data)}`);
+      const error = new Error(
+        `${label} failed (HTTP ${response.status}): ${jsonErrorMessage(data)}`,
+      );
       error.status = response.status;
       error.reason = apiReason(data);
       throw error;
@@ -83,14 +98,18 @@ async function getYouTubeAccessToken() {
     "https://oauth2.googleapis.com/token",
     {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
       body,
     },
     "Google OAuth token refresh",
   );
 
   if (!data.access_token) {
-    throw new Error("Google OAuth token refresh succeeded without an access_token");
+    throw new Error(
+      "Google OAuth token refresh succeeded without an access_token",
+    );
   }
 
   return data.access_token;
@@ -100,10 +119,14 @@ async function holodexLatest50() {
   const apiKey = requiredEnv("HOLODEX_API_KEY");
   const seen = new Set();
   const items = [];
-  const maxPages = 5;
 
-  for (let page = 0; page < maxPages && items.length < INITIAL_LIMIT; page += 1) {
+  for (
+    let page = 0;
+    page < 5 && items.length < INITIAL_LIMIT;
+    page += 1
+  ) {
     const offset = page * INITIAL_LIMIT;
+
     const payload = {
       sort: "newest",
       target: ["stream"],
@@ -137,11 +160,9 @@ async function holodexLatest50() {
     for (const item of data.items) {
       const id = typeof item?.id === "string" ? item.id.trim() : "";
       if (!id || seen.has(id)) continue;
+
       seen.add(id);
 
-      // Don't add premieres/live/upcoming/missing videos until YouTube can
-      // expose them as normal playlist-able videos. Keep paging so the
-      // initial import can still collect a full 50 usable matches.
       if (
         item.status === "live" ||
         item.status === "upcoming" ||
@@ -154,7 +175,8 @@ async function holodexLatest50() {
         id,
         title: typeof item.title === "string" ? item.title : id,
         publishedAt: item.published_at || item.available_at || null,
-        channelName: item.channel?.english_name || item.channel?.name || "",
+        channelName:
+          item.channel?.english_name || item.channel?.name || "",
         url: `https://www.youtube.com/watch?v=${id}`,
       });
 
@@ -164,7 +186,13 @@ async function holodexLatest50() {
     if (items.length >= INITIAL_LIMIT) break;
 
     const total = Number(data.total);
-    if (Number.isFinite(total) && offset + data.items.length >= total) break;
+    if (
+      Number.isFinite(total) &&
+      offset + data.items.length >= total
+    ) {
+      break;
+    }
+
     if (data.items.length < INITIAL_LIMIT) break;
   }
 
@@ -173,7 +201,13 @@ async function holodexLatest50() {
     items,
   };
 }
-async function youtubeRequest(accessToken, path, options = {}, label = "YouTube API request") {
+
+async function youtubeRequest(
+  accessToken,
+  path,
+  options = {},
+  label = "YouTube API request",
+) {
   return fetchJson(
     `${YOUTUBE_API}${path}`,
     {
@@ -197,7 +231,10 @@ async function listAllPlaylists(accessToken) {
       mine: "true",
       maxResults: "50",
     });
-    if (pageToken) params.set("pageToken", pageToken);
+
+    if (pageToken) {
+      params.set("pageToken", pageToken);
+    }
 
     const data = await youtubeRequest(
       accessToken,
@@ -219,7 +256,9 @@ async function createPlaylist(accessToken) {
     "/playlists?part=snippet,status",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         snippet: {
           title: PLAYLIST_TITLE,
@@ -235,35 +274,50 @@ async function createPlaylist(accessToken) {
     "YouTube playlist creation",
   );
 
-  if (!data.id) throw new Error("YouTube created a playlist without returning an id");
+  if (!data.id) {
+    throw new Error(
+      "YouTube created a playlist without returning an id",
+    );
+  }
 
-  console.log(`Created playlist: ${PLAYLIST_TITLE} (${data.id}) [${PLAYLIST_PRIVACY}]`);
+  console.log(
+    `Created playlist: ${PLAYLIST_TITLE} (${data.id}) [${PLAYLIST_PRIVACY}]`,
+  );
+
   return data.id;
 }
 
 async function resolvePlaylistId(accessToken) {
   const explicitId = process.env.YOUTUBE_PLAYLIST_ID?.trim();
+
   if (explicitId) {
     console.log(`Using YOUTUBE_PLAYLIST_ID: ${explicitId}`);
     return explicitId;
   }
 
   const playlists = await listAllPlaylists(accessToken);
+
   const matches = playlists.filter(
     (playlist) => playlist.snippet?.title === PLAYLIST_TITLE,
   );
 
   if (matches.length > 0) {
-    // Prefer an exact title match; if more than one exists, use a stable
-    // playlist-ID order so repeated runs remain deterministic.
-    matches.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    matches.sort((a, b) =>
+      String(a.id).localeCompare(String(b.id)),
+    );
+
     const playlist = matches[0];
-    console.log(`Using existing playlist: ${PLAYLIST_TITLE} (${playlist.id})`);
+
+    console.log(
+      `Using existing playlist: ${PLAYLIST_TITLE} (${playlist.id})`,
+    );
+
     if (matches.length > 1) {
       console.log(
         `Warning: found ${matches.length} playlists with the exact title. Using ${playlist.id}. Set YOUTUBE_PLAYLIST_ID to pin a specific one.`,
       );
     }
+
     return playlist.id;
   }
 
@@ -271,6 +325,14 @@ async function resolvePlaylistId(accessToken) {
   return { playlistId, created: true };
 }
 
+/*
+ * YouTube occasionally returns transient HTTP 5xx errors from
+ * playlistItems.list. This is not a client-side validation error, so retry
+ * that read a few times with exponential backoff before failing.
+ *
+ * The request itself is intentionally simple and matches YouTube's documented
+ * playlistItems.list contract: part=contentDetails + playlistId + maxResults.
+ */
 async function listPlaylistVideoIds(accessToken, playlistId) {
   const ids = new Set();
   let pageToken = "";
@@ -281,14 +343,41 @@ async function listPlaylistVideoIds(accessToken, playlistId) {
       playlistId,
       maxResults: "50",
     });
-    if (pageToken) params.set("pageToken", pageToken);
 
-    const data = await youtubeRequest(
-      accessToken,
-      `/playlistItems?${params}`,
-      {},
-      "YouTube playlist items list",
-    );
+    if (pageToken) {
+      params.set("pageToken", pageToken);
+    }
+
+    let data;
+
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        data = await youtubeRequest(
+          accessToken,
+          `/playlistItems?${params}`,
+          {},
+          `YouTube playlist items list (attempt ${attempt}/4)`,
+        );
+        break;
+      } catch (error) {
+        const retryable =
+          Number(error.status) >= 500 &&
+          Number(error.status) <= 599;
+
+        if (!retryable || attempt === 4) {
+          throw error;
+        }
+
+        const delayMs = 1000 * 2 ** (attempt - 1);
+        console.log(
+          `YouTube playlistItems.list returned HTTP ${error.status}; retrying in ${delayMs} ms...`,
+        );
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, delayMs),
+        );
+      }
+    }
 
     for (const item of data.items || []) {
       const id = item.contentDetails?.videoId;
@@ -303,6 +392,7 @@ async function listPlaylistVideoIds(accessToken, playlistId) {
 
 function isQuotaError(error) {
   const value = String(error.reason || "").toLowerCase();
+
   return [
     "quotaexceeded",
     "dailylimitexceeded",
@@ -318,7 +408,9 @@ async function addVideo(accessToken, playlistId, video, position = 0) {
       "/playlistItems?part=snippet",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           snippet: {
             playlistId,
@@ -335,9 +427,11 @@ async function addVideo(accessToken, playlistId, video, position = 0) {
 
     return "added";
   } catch (error) {
-    // If an item became unavailable or otherwise cannot be inserted, keep the
-    // rest of the sync moving. Quota/auth errors are fatal.
-    if (isQuotaError(error) || error.status === 401 || error.status === 403) {
+    if (
+      isQuotaError(error) ||
+      error.status === 401 ||
+      error.status === 403
+    ) {
       throw error;
     }
 
@@ -350,18 +444,31 @@ function writeSummary(lines) {
   const file = process.env.GITHUB_STEP_SUMMARY;
   if (!file) return;
 
-  fs.appendFileSync(file, lines.join("\n") + "\n", "utf8");
+  fs.appendFileSync(
+    file,
+    lines.join("\n") + "\n",
+    "utf8",
+  );
 }
 
 async function main() {
   console.log("=== Holodex → YouTube Playlist Sync ===");
-  console.log(`Source: ${HOLODEX_ORG} + ${HOLODEX_TOPIC}`);
+  console.log(
+    `Source: ${HOLODEX_ORG} + ${HOLODEX_TOPIC}`,
+  );
   console.log(`Playlist: ${PLAYLIST_TITLE}`);
-  console.log(`Initial/import window: latest ${INITIAL_LIMIT}`);
-  console.log("Mode: append-only (existing playlist videos are never removed)\n");
+  console.log(
+    `Initial/import window: latest ${INITIAL_LIMIT}`,
+  );
+  console.log(
+    "Mode: append-only (existing playlist videos are never removed)\n",
+  );
 
   const holodex = await holodexLatest50();
-  console.log(`Holodex returned ${holodex.items.length} usable videos from ${holodex.total} matching results.`);
+
+  console.log(
+    `Holodex returned ${holodex.items.length} usable videos from ${holodex.total} matching results.`,
+  );
 
   if (holodex.items.length === 0) {
     console.log("Nothing to add.");
@@ -369,20 +476,30 @@ async function main() {
   }
 
   const accessToken = await getYouTubeAccessToken();
+
   const resolved = await resolvePlaylistId(accessToken);
-  const playlistId = typeof resolved === "string" ? resolved : resolved.playlistId;
-  const createdNow = typeof resolved === "object" && resolved.created === true;
+  const playlistId =
+    typeof resolved === "string" ? resolved : resolved.playlistId;
+
+  const createdNow =
+    typeof resolved === "object" && resolved.created === true;
+
   const existing = createdNow
     ? new Set()
     : await listPlaylistVideoIds(accessToken, playlistId);
 
-  const newItems = holodex.items.filter((item) => !existing.has(item.id));
+  const newItems = holodex.items.filter(
+    (item) => !existing.has(item.id),
+  );
 
-  console.log(`Videos already in playlist: ${existing.size}`);
+  console.log(
+    `Videos already in playlist: ${existing.size}`,
+  );
   console.log(`New videos to add: ${newItems.length}`);
 
   if (newItems.length === 0) {
     console.log("Playlist is already up to date.");
+
     writeSummary([
       "## Holodex → YouTube sync",
       "",
@@ -392,26 +509,39 @@ async function main() {
       "",
       `Playlist: [${PLAYLIST_TITLE}](https://www.youtube.com/playlist?list=${playlistId})`,
     ]);
+
     return;
   }
 
-  // Holodex is newest-first. Insert oldest-first at position 0 so the final
-  // playlist order remains newest-first without reordering existing items.
+  /*
+   * Holodex is newest-first. Insert oldest-first at position 0, so after all
+   * inserts the new block remains newest-first and existing playlist items
+   * stay below it.
+   */
   let added = 0;
   let skipped = 0;
 
   for (const video of [...newItems].reverse()) {
-    const result = await addVideo(accessToken, playlistId, video, 0);
+    const result = await addVideo(
+      accessToken,
+      playlistId,
+      video,
+      0,
+    );
 
     if (result === "added") {
       added += 1;
-      console.log(`Added: ${video.title} — ${video.channelName}`);
+      console.log(
+        `Added: ${video.title} — ${video.channelName}`,
+      );
     } else {
       skipped += 1;
     }
   }
 
-  console.log(`\nSync complete. Added: ${added}; skipped: ${skipped}.`);
+  console.log(
+    `\nSync complete. Added: ${added}; skipped: ${skipped}.`,
+  );
 
   writeSummary([
     "## Holodex → YouTube sync",
