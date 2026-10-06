@@ -250,7 +250,8 @@ async function resolvePlaylistId(accessToken) {
     return playlist.id;
   }
 
-  return createPlaylist(accessToken);
+  const playlistId = await createPlaylist(accessToken);
+  return { playlistId, created: true };
 }
 
 async function listPlaylistVideoIds(accessToken, playlistId) {
@@ -351,8 +352,12 @@ async function main() {
   }
 
   const accessToken = await getYouTubeAccessToken();
-  const playlistId = await resolvePlaylistId(accessToken);
-  const existing = await listPlaylistVideoIds(accessToken, playlistId);
+  const resolved = await resolvePlaylistId(accessToken);
+  const playlistId = typeof resolved === "string" ? resolved : resolved.playlistId;
+  const createdNow = typeof resolved === "object" && resolved.created === true;
+  const existing = createdNow
+    ? new Set()
+    : await listPlaylistVideoIds(accessToken, playlistId);
 
   const newItems = holodex.items.filter((item) => !existing.has(item.id));
 
