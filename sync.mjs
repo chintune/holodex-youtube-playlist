@@ -401,7 +401,7 @@ function isQuotaError(error) {
   ].includes(value);
 }
 
-async function addVideo(accessToken, playlistId, video, position = 0) {
+async function addVideo(accessToken, playlistId, video) {
   try {
     await youtubeRequest(
       accessToken,
@@ -414,7 +414,6 @@ async function addVideo(accessToken, playlistId, video, position = 0) {
         body: JSON.stringify({
           snippet: {
             playlistId,
-            position,
             resourceId: {
               kind: "youtube#video",
               videoId: video.id,
@@ -514,19 +513,17 @@ async function main() {
   }
 
   /*
-   * Holodex is newest-first. Insert oldest-first at position 0, so after all
-   * inserts the new block remains newest-first and existing playlist items
-   * stay below it.
+   * Append videos without setting snippet.position. YouTube rejects explicit
+   * positional insertion when the playlist is not using manual sorting.
    */
   let added = 0;
   let skipped = 0;
 
-  for (const video of [...newItems].reverse()) {
+  for (const video of newItems) {
     const result = await addVideo(
       accessToken,
       playlistId,
       video,
-      0,
     );
 
     if (result === "added") {
