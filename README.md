@@ -16,7 +16,7 @@ The workflow calls Holodex's API, gets the newest matching videos, then compares
 
 The first run can add up to 50 videos. Every later run can add only videos that are new since the previous sync.
 
-The playlist is kept newest-first by inserting newly discovered videos at position 0. Existing videos are not reordered or deleted.
+The script inserts missing videos without specifying a playlist position. YouTube’s playlist ordering setting determines where new entries appear, so the script does not guarantee that the overall playlist is newest-first. Existing videos are not deleted or deliberately repositioned.
 
 ## Files
 

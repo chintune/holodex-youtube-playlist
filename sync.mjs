@@ -174,10 +174,8 @@ async function holodexLatest50() {
       items.push({
         id,
         title: typeof item.title === "string" ? item.title : id,
-        publishedAt: item.published_at || item.available_at || null,
         channelName:
           item.channel?.english_name || item.channel?.name || "",
-        url: `https://www.youtube.com/watch?v=${id}`,
       });
 
       if (items.length >= INITIAL_LIMIT) break;
@@ -434,7 +432,19 @@ async function addVideo(accessToken, playlistId, video) {
       throw error;
     }
 
-    console.log(`Skipped ${video.id}: ${error.message}`);
+    const reason = String(error.reason || "").toLowerCase();
+    const expectedSkip = [
+      "videonotfound",
+      "videoalreadyinplaylist",
+    ].includes(reason);
+
+    if (!expectedSkip) {
+      throw error;
+    }
+
+    console.log(
+      `Skipped unavailable/duplicate ${video.id}: ${error.message}`,
+    );
     return "skipped";
   }
 }
@@ -546,7 +556,7 @@ async function main() {
     `- Matching Holodex videos checked: **${holodex.items.length}**`,
     `- New matches found: **${newItems.length}**`,
     `- Added this run: **${added}**`,
-    `- Skipped/unavailable: **${skipped}**`,
+    `- Unavailable/duplicate videos skipped: **${skipped}**`,
     "",
     `Playlist: [${PLAYLIST_TITLE}](https://www.youtube.com/playlist?list=${playlistId})`,
   ]);

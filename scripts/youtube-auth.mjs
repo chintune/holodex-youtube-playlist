@@ -32,7 +32,6 @@ function loadClient(filename) {
 
   if (!clientId) die("client_secret.json does not contain client_id");
 
-  const redirectUris = Array.isArray(cfg.redirect_uris) ? cfg.redirect_uris : [];
   const isWebClient = Boolean(json.web) && !json.installed;
 
   if (isWebClient) {
@@ -42,7 +41,7 @@ function loadClient(filename) {
     );
   }
 
-  return { clientId, clientSecret, redirectUris };
+  return { clientId, clientSecret };
 }
 
 function pkceVerifier() {
@@ -73,13 +72,13 @@ async function exchangeCode({ clientId, clientSecret, code, redirectUri, verifie
   const data = await response.json();
 
   if (!response.ok) {
-    die(
+    throw new Error(
       `Token exchange failed (HTTP ${response.status}): ${JSON.stringify(data)}`,
     );
   }
 
   if (!data.refresh_token) {
-    die(
+    throw new Error(
       "Google did not return a refresh_token. Re-run the helper and make sure offline access is requested.",
     );
   }
@@ -140,9 +139,11 @@ server.listen(0, "127.0.0.1", async () => {
 
     if (error) {
       res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(`<h1>Google OAuth failed</h1><p>${error}</p>`);
-      server.close();
-      process.exit(1);
+      console.error(`Google OAuth failed: ${error}`);
+      res.end("<h1>Google OAuth failed</h1><p>Authorization was not completed.</p>");
+      server.close(() => {
+        process.exitCode = 1;
+      });
     }
 
     if (!code) {
@@ -177,8 +178,9 @@ server.listen(0, "127.0.0.1", async () => {
       console.error(error2);
       res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
       res.end("<h1>Authorization failed</h1><p>Check the terminal for details.</p>");
-      server.close();
-      process.exit(1);
+      server.close(() => {
+        process.exitCode = 1;
+      });
     }
   });
 });
